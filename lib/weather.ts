@@ -8,7 +8,7 @@ export interface WeatherData {
   temperature: {
     high: number;
     low: number;
-    unit: 'C' | 'F';
+    unit: 'C';
   };
   conditions: string;
   precipitation: number;
@@ -30,31 +30,6 @@ export async function getWeather(
   startDate: string,
   endDate: string
 ): Promise<WeatherForecast> {
-  const apiKey = process.env.WEATHER_API_KEY;
-
-  if (!apiKey) {
-    // Return mock data if no API key is configured
-    return getMockWeather(location, startDate, endDate);
-  }
-
-  try {
-    // TODO: Implement actual weather API call
-    // For now, return mock data
-    return getMockWeather(location, startDate, endDate);
-  } catch (error) {
-    console.error('Error fetching weather:', error);
-    throw new Error('Failed to fetch weather data');
-  }
-}
-
-/**
- * Generate mock weather data for testing
- */
-function getMockWeather(
-  location: string,
-  startDate: string,
-  endDate: string
-): WeatherForecast {
   const start = new Date(startDate);
   const end = new Date(endDate);
   const forecast: WeatherData[] = [];
