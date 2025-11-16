@@ -142,15 +142,14 @@ npm run db:studio
 
 ### Database Schema
 
-**Unified Database Client:**
-- Uses `@libsql/client` for all environments (local development, production, CI)
-- **Local Development**: Connects to local SQLite file via `file:./database.db` URL
-- **Production/CI**: Connects to Turso (cloud SQLite) via HTTPS URL
-- Database selection is automatic based on environment variables
+**Local SQLite Database:**
+- Uses `@libsql/client` with local SQLite
+- Database file: `database.db` (automatically created)
+- Connection managed by `lib/db.ts` singleton
+- Version controlled via git-crypt (encrypted)
 
 **Connection Logic** (`lib/db.ts`):
-- If `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are set, connects to Turso
-- Otherwise, uses local SQLite file via libsql's `file:` protocol
+- Connects to local SQLite file via `file:./database.db` URL
 - Singleton pattern ensures one connection per process
 - Returns Drizzle ORM instance for type-safe queries
 
@@ -159,9 +158,7 @@ npm run db:studio
 - Migrations stored in `drizzle/migrations/`
 
 **Environment Variables:**
-- `TURSO_DATABASE_URL`: Turso database URL (e.g., `libsql://db-name.turso.io`)
-- `TURSO_AUTH_TOKEN`: Turso authentication token
-- `WEATHER_API_KEY`: API key for weather service
+- `WEATHER_API_KEY`: API key for weather service (optional - uses mock data if not set)
 - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`: LLM provider credentials
 - See `.env.example` for setup instructions
 
@@ -177,73 +174,10 @@ The local database file is encrypted with git-crypt and should not be committed 
 **On every push/PR:**
 1. Install dependencies (`npm ci`)
 2. Run linter (`npm run lint`) - must pass with 0 errors
-3. Run tests (`npm test`)
+3. Run tests (`npm test`) - all tests must pass
 4. Build application (`npm run build`) - must succeed
 
-**On push to main branch only:**
-5. Run production database migrations on Turso
-   - Uses `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` from GitHub secrets
-   - Automatically applies pending migrations to production database
-6. Deploy to Vercel (only if migrations succeed)
-   - Uses Vercel CLI to deploy to production
-   - Ensures database is migrated before new code goes live
-
-**On pull requests:**
-7. Create or update Turso branch database for the PR via Platform API
-   - Branch database named `packing-list-pr-<number>`
-   - Seeded from production database (schema + data copy)
-   - Provides isolated database for preview testing
-8. Run migrations on branch database
-9. Deploy preview to Vercel with branch database credentials (7-day tokens)
-10. Comment on PR with preview URL and database info
-11. Auto-cleanup branch database when PR closes (via API)
-
-**GitHub Secrets Required:**
-- `TURSO_DATABASE_URL`: Production database URL
-- `TURSO_AUTH_TOKEN`: Production database auth token
-- `TURSO_API_TOKEN`: Turso Platform API token for managing branch databases
-- `TURSO_ORG_NAME`: Turso organization name
-- `TURSO_PRIMARY_DB_NAME`: Name of primary database to branch from
-- `VERCEL_TOKEN`: Vercel API token for deployments
-- `VERCEL_ORG_ID`: Vercel organization/team ID
-- `VERCEL_PROJECT_ID`: Vercel project ID
-
-**Migration Strategy:**
-- Local development: Migrations run against local `database.db`
-- Production: Migrations auto-run via GitHub Actions on main branch merges
-- Migration script (`lib/migrate.ts`) automatically detects environment
-
-## Deployment
-
-**Vercel Deployment:**
-
-This project is configured for deployment on Vercel.
-
-**Quick Start:**
-1. Connect your GitHub repository to Vercel
-2. Configure environment variables
-3. Deploy
-
-**Deployment Strategy:**
-- **Production (main branch)**: Controlled by GitHub Actions
-  - Automatic Vercel deployments are disabled for production
-  - GitHub Actions runs migrations first, then deploys to Vercel
-  - Ensures database schema is updated before new code goes live
-- **Preview (pull requests)**: Controlled by GitHub Actions with Turso database branching
-  - Each PR gets an isolated Turso database branch via Platform API
-  - Branch database is seeded from production (schema + data copy)
-  - Migrations run on branch database before preview deployment
-  - Temporary credentials (7-day expiration) generated via API
-  - Preview deployment uses branch database credentials
-  - Safe testing of schema changes and features without affecting production
-  - Branch database automatically deleted via API when PR closes
-  - No CLI installation required - all operations use Turso Platform API
-
-**Environment Variables Required in Vercel:**
-- `TURSO_DATABASE_URL` - Production database URL
-- `TURSO_AUTH_TOKEN` - Production database auth token
-- `WEATHER_API_KEY` - Weather API credentials
-- `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` - LLM provider credentials
+This ensures code quality and prevents broken code from being merged. The pipeline runs automatically on all branches and pull requests.
 
 ## Development Workflow
 

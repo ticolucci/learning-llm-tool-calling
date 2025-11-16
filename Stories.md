@@ -92,13 +92,10 @@ This document tracks planned features, improvements, and technical debt for the 
 ### Phase 1: Foundation ✅
 - [x] Next.js project setup
 - [x] TypeScript configuration
-- [x] ESLint and Prettier setup
+- [x] ESLint setup with Next.js and TypeScript
 - [x] Vitest testing infrastructure
-- [x] Drizzle ORM database layer
-- [x] Turso cloud database integration
-- [x] CI/CD pipeline with GitHub Actions
-- [x] Vercel deployment automation
-- [x] Database branching for PR previews
+- [x] Drizzle ORM with local SQLite
+- [x] CI pipeline with GitHub Actions (lint, test, build)
 
 ### Phase 2: Core Features ✅
 - [x] Basic chat interface
