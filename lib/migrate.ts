@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Database migration script
- * Automatically detects environment and runs migrations
+ * Runs migrations against local SQLite database
  *
  * Usage:
  *   npm run db:migrate
@@ -13,23 +13,13 @@ import { drizzle } from 'drizzle-orm/libsql';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 
 async function runMigrations() {
-  const isTurso =
-    !!process.env.TURSO_DATABASE_URL && !!process.env.TURSO_AUTH_TOKEN;
-
   console.log('🔄 Running database migrations...');
-  console.log(`Environment: ${isTurso ? 'Turso (cloud)' : 'Local SQLite'}`);
+  console.log('Database: Local SQLite (database.db)');
 
-  // Create client
-  const client = createClient(
-    isTurso
-      ? {
-          url: process.env.TURSO_DATABASE_URL!,
-          authToken: process.env.TURSO_AUTH_TOKEN!,
-        }
-      : {
-          url: 'file:./database.db',
-        }
-  );
+  // Create client for local SQLite
+  const client = createClient({
+    url: 'file:./database.db',
+  });
 
   const db = drizzle(client);
 
