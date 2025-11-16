@@ -50,5 +50,6 @@ Thumbs.db
 # Git-crypt
 .git-crypt/
 
-# Drizzle
-drizzle/
+# Drizzle (exclude meta, include migrations)
+drizzle/.DS_Store
+drizzle/meta/
