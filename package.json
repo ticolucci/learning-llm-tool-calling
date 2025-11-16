@@ -17,8 +17,9 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.67",
     "@libsql/client": "^0.14.0",
-    "ai": "^3.4.32",
+    "ai": "^5.0.93",
     "drizzle-orm": "^0.36.4",
     "next": "15.0.3",
     "openai": "^4.73.0",
