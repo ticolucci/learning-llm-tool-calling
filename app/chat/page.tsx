@@ -1,11 +1,44 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createConversation, saveMessage } from '@/lib/actions/messages';
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const conversationIdRef = useRef<string | null>(null);
+
+  // Initialize conversation on mount
+  useEffect(() => {
+    const initConversation = async () => {
+      const result = await createConversation({ title: 'Packing Assistant Chat' });
+      if (result.success) {
+        conversationIdRef.current = result.conversationId;
+      } else {
+        console.error('Failed to create conversation:', result.error);
+      }
+    };
+
+    initConversation();
+  }, []);
+
+  // Helper to save message in background
+  const saveMessageInBackground = (role: 'user' | 'assistant', content: string) => {
+    if (!conversationIdRef.current) {
+      console.warn('No conversation ID available, skipping message save');
+      return;
+    }
+
+    // Fire and forget - don't await
+    saveMessage({
+      conversationId: conversationIdRef.current,
+      role,
+      content,
+    }).catch((error) => {
+      console.error('Background save failed:', error);
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,17 +51,25 @@ export default function ChatPage() {
     // Add user message
     setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
 
+    // Save user message in background
+    saveMessageInBackground('user', userMessage);
+
     try {
       // TODO: Implement API call to LLM service
       // For now, just echo back
       setTimeout(() => {
+        const assistantMessage = 'Chat functionality coming soon! This will integrate with LLM tool-calling.';
         setMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
-            content: 'Chat functionality coming soon! This will integrate with LLM tool-calling.',
+            content: assistantMessage,
           },
         ]);
+
+        // Save assistant message in background
+        saveMessageInBackground('assistant', assistantMessage);
+
         setIsLoading(false);
       }, 1000);
     } catch (error) {
