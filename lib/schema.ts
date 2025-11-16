@@ -15,6 +15,18 @@ export const conversations = sqliteTable('conversations', {
     .default(sql`(unixepoch())`),
 });
 
+export const messages = sqliteTable('messages', {
+  id: text('id').primaryKey(),
+  content: text('content'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  conversationId: text('conversation_id')
+    .notNull()
+    .references(() => conversations.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(), // e.g., 'user' or 'assistant'
+});
+
 /**
  * Checklists table - stores generated packing checklists
  */
