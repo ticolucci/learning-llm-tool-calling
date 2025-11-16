@@ -17,22 +17,19 @@ export async function executeTool(
     }
 
     const result = await tool.execute(invocation.parameters);
-    const durationMs = Math.round(performance.now() - startTime);
 
     return {
       id: invocation.id,
       name: invocation.name,
       result,
-      durationMs,
+      durationMs: Math.round(performance.now() - startTime),
     };
   } catch (error) {
-    const durationMs = Math.round(performance.now() - startTime);
-
     return {
       id: invocation.id,
       name: invocation.name,
       error: error instanceof Error ? error.message : 'Unknown error',
-      durationMs,
+      durationMs: Math.round(performance.now() - startTime),
     };
   }
 }
