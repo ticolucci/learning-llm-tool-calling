@@ -1,13 +1,31 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useChat, type UIMessage } from '@ai-sdk/react';
 import { createConversation, saveMessage } from '@/lib/actions/messages';
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const conversationIdRef = useRef<string | null>(null);
+  const [input, setInput] = useState('');
+
+  // AI SDK v2 useChat hook - manages messages and streaming
+  const { messages, sendMessage, status } = useChat({
+    onFinish: ({ message }) => {
+      // Save assistant message to database when streaming completes
+      const content = getMessageText(message);
+      if (content) {
+        saveMessageInBackground('assistant', content);
+      }
+    },
+  });
+
+  // Helper function to extract text content from message parts
+  const getMessageText = (message: UIMessage): string => {
+    return message.parts
+      .filter((part) => part.type === 'text')
+      .map((part) => ('text' in part ? part.text : ''))
+      .join('');
+  };
 
   // Initialize conversation on mount
   useEffect(() => {
@@ -40,43 +58,25 @@ export default function ChatPage() {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Custom submit handler to save user messages before sending
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
 
     const userMessage = input.trim();
-    setInput('');
-    setIsLoading(true);
+    if (!userMessage) return;
 
-    // Add user message
-    setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
-
-    // Save user message in background
+    // Save user message to database
     saveMessageInBackground('user', userMessage);
 
-    try {
-      // TODO: Implement API call to LLM service
-      // For now, just echo back
-      setTimeout(() => {
-        const assistantMessage = 'Chat functionality coming soon! This will integrate with LLM tool-calling.';
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: assistantMessage,
-          },
-        ]);
+    // Send message using AI SDK v2 API
+    sendMessage({ text: userMessage });
 
-        // Save assistant message in background
-        saveMessageInBackground('assistant', assistantMessage);
-
-        setIsLoading(false);
-      }, 1000);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setIsLoading(false);
-    }
+    // Clear input
+    setInput('');
   };
+
+  // Derive loading state from status
+  const isLoading = status === 'submitted' || status === 'streaming';
 
   return (
     <div className="min-h-screen flex flex-col max-w-4xl mx-auto p-4">
@@ -94,9 +94,9 @@ export default function ChatPage() {
             <p className="text-sm mt-2">Try: &quot;I&apos;m going to Paris next week&quot;</p>
           </div>
         ) : (
-          messages.map((msg, idx) => (
+          messages.map((msg) => (
             <div
-              key={idx}
+              key={msg.id}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
@@ -106,7 +106,7 @@ export default function ChatPage() {
                     : 'bg-gray-200 dark:bg-gray-800'
                 }`}
               >
-                <p className="whitespace-pre-wrap">{msg.content}</p>
+                <p className="whitespace-pre-wrap">{getMessageText(msg)}</p>
               </div>
             </div>
           ))
@@ -120,7 +120,7 @@ export default function ChatPage() {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t pt-4">
+      <form onSubmit={onSubmit} className="border-t pt-4">
         <div className="flex gap-2">
           <input
             type="text"

@@ -201,9 +201,153 @@ const stream = new ReadableStream({
 
 ---
 
+### ✅ Completed Sessions (continued)
+
+#### Session 3: Connect Frontend to Streaming API (COMPLETED)
+**Goal**: Replace mock streaming in chat UI with real API calls using AI SDK
+
+**What We Built**: Integrated `@ai-sdk/react` useChat hook with the frontend
+
+**Major Discovery**: AI SDK v2.0 API Changes
+- **Package**: Required separate `@ai-sdk/react` package (not included in `ai` package)
+- **API Breaking Changes**: v2.0 uses different patterns than v1.x documentation
+
+**Installation**:
+```bash
+npm install @ai-sdk/react@latest
+```
+
+**Key API Differences in v2.0**:
+
+| Feature | v1.x (docs) | v2.0 (actual) |
+|---------|------------|---------------|
+| Import | `import { useChat } from 'ai/react'` | `import { useChat } from '@ai-sdk/react'` |
+| Input management | Provided by hook | Manual with `useState` |
+| Submit handler | `handleSubmit` provided | Custom handler with `sendMessage({ text })` |
+| Message structure | `message.content` | `message.parts[]` array |
+| Loading state | `isLoading` provided | Derive from `status` |
+| Status values | N/A | `'submitted' | 'streaming' | 'ready' | 'error'` |
+
+**Current Implementation**:
+```typescript
+import { useChat, type UIMessage } from '@ai-sdk/react';
+
+export default function ChatPage() {
+  const [input, setInput] = useState('');
+
+  // v2.0 API - different from documentation!
+  const { messages, sendMessage, status } = useChat({
+    onFinish: ({ message }) => {
+      // Save assistant message when complete
+      const content = getMessageText(message);
+      saveMessageInBackground('assistant', content);
+    },
+  });
+
+  // Helper to extract text from message parts
+  const getMessageText = (message: UIMessage): string => {
+    return message.parts
+      .filter((part) => part.type === 'text')
+      .map((part) => ('text' in part ? part.text : ''))
+      .join('');
+  };
+
+  // Custom submit handler (v2.0 doesn't provide handleSubmit)
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const userMessage = input.trim();
+    if (!userMessage) return;
+
+    saveMessageInBackground('user', userMessage);
+    sendMessage({ text: userMessage }); // v2.0 API
+    setInput('');
+  };
+
+  // Derive loading state from status
+  const isLoading = status === 'submitted' || status === 'streaming';
+
+  return (
+    <form onSubmit={onSubmit}>
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        disabled={isLoading}
+      />
+      <button type="submit" disabled={isLoading}>Send</button>
+
+      {messages.map((msg) => (
+        <div key={msg.id}>
+          <strong>{msg.role}:</strong> {getMessageText(msg)}
+        </div>
+      ))}
+    </form>
+  );
+}
+```
+
+**Key Learnings**:
+- **UIMessage Structure**: Messages have a `parts` array instead of simple `content`
+  - Text parts: `{ type: 'text', text: string }`
+  - Also supports: file, tool, reasoning, data parts
+- **No Built-in Input Management**: Must use `useState` for input field
+- **sendMessage API**: `sendMessage({ text: string })` replaces `handleSubmit`
+- **Status-based Loading**: Derive `isLoading` from `status === 'submitted' || status === 'streaming'`
+- **onFinish Callback**: Still available for saving messages after streaming completes
+
+**Challenges Encountered**:
+
+1. **Wrong Import Path**:
+```
+Error: Cannot find module 'ai/react'
+Fix: Install @ai-sdk/react separately, import from '@ai-sdk/react'
+```
+
+2. **Type Mismatches**:
+```
+Error: Property 'input' does not exist on UseChatHelpers
+Fix: v2.0 doesn't provide input management - use useState
+```
+
+3. **Message Content Access**:
+```
+Error: Property 'content' does not exist on UIMessage
+Fix: Use message.parts array with getMessageText() helper
+```
+
+4. **Status Value**:
+```
+Error: 'in_progress' doesn't match ChatStatus type
+Fix: Use 'submitted' and 'streaming' status values
+```
+
+**Test Results**:
+```bash
+# Backend API test
+curl -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Say hello in 3 words"}]}'
+
+# Status: 200 OK ✅
+# Logs show: OpenAI streaming working
+```
+
+**Frontend Test**:
+- Open [http://localhost:3000/chat](http://localhost:3000/chat)
+- Type a message and click Send
+- Should see real-time streaming from gpt-5-nano
+- Messages automatically saved to database
+
+**Architecture Benefits**:
+- Clean separation: `useChat` manages streaming, we manage persistence
+- Real-time updates via React state
+- Database saves happen in background (non-blocking)
+- Type-safe with TypeScript throughout
+
+---
+
 ### 🚧 In Progress
 
-None currently - ready to begin Session 3!
+None currently - ready to begin Session 4!
 
 ---
 
@@ -724,7 +868,7 @@ npm install ai@latest @ai-sdk/openai@latest
 |---------|--------|-----------------|-----------------|
 | 1: Basic Streaming | ✅ Complete | 2024 | Manual ReadableStream implementation |
 | 2: LLM Integration | ✅ Complete | 2024 | AI SDK v5 + gpt-5-nano streaming |
-| 3: Frontend Integration | 📋 Pending | - | useChat() hook |
+| 3: Frontend Integration | ✅ Complete | 2025-01-17 | @ai-sdk/react v2.0 + sendMessage API |
 | 4: Tool Definitions | 📋 Pending | - | Add tools to streamText() |
 | 5: Stream Tool Events | 📋 Pending | - | StreamData implementation |
 | 6: Tool UI Components | 📋 Pending | - | Visual tool invocations |
@@ -735,20 +879,27 @@ npm install ai@latest @ai-sdk/openai@latest
 
 ## Next Steps
 
-**Immediate**: Begin Session 3 - Connect Frontend to Streaming API
+**Immediate**: Begin Session 4 - Add Tool Definitions to Stream
 
 **Action Items**:
-1. Install AI SDK React integration (if not already installed)
-2. Import `useChat()` hook in `app/chat/page.tsx`
-3. Replace mock streaming with real API calls
-4. Test streaming in browser
-5. Handle loading and error states
-6. Update todo list and mark Session 3 complete
+1. Review existing tool definitions in `lib/llm/tools/`
+2. Add `tools` parameter to `streamText()` in `/api/chat/route.ts`
+3. Configure tool calling mode (`toolChoice: 'auto'`)
+4. Test tool invocations via API
+5. Verify tools are being called by the LLM
+6. Update documentation and mark Session 4 complete
 
-**Command to Start**:
+**Current Status**:
+- ✅ Session 3 Complete: Frontend now uses real streaming API
+- ✅ Chat UI working with `@ai-sdk/react` v2.0
+- ✅ Messages being saved to database
+- 📋 Next: Enable LLM to call tools (weather, checklist)
+
+**Command to Test**:
 ```bash
 npm run dev
 # Open http://localhost:3000/chat
+# Try: "I'm going to Paris next week, what should I pack?"
 ```
 
 ---
@@ -784,5 +935,5 @@ The learning program is designed to be incremental - each session builds on the 
 
 ---
 
-**Last Updated**: 2024 (Session 2 completion)
-**Next Session**: Session 3 - Connect Frontend to Streaming API
+**Last Updated**: 2025-01-17 (Session 3 completion)
+**Next Session**: Session 4 - Add Tool Definitions to Stream
