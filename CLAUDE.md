@@ -159,7 +159,9 @@ npm run db:studio
 
 **Environment Variables:**
 - `WEATHER_API_KEY`: API key for weather service (optional - uses mock data if not set)
-- `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`: LLM provider credentials
+- `GROQ_API_KEY`: Groq API key for LLM provider (currently in use)
+  - Get your API key from https://console.groq.com/
+- `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`: Alternative LLM provider credentials
 - See `.env.example` for setup instructions
 
 The local database file is encrypted with git-crypt and should not be committed unencrypted.

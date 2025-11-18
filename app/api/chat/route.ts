@@ -10,7 +10,7 @@
  * 4. How tools execute during streaming
  */
 
-import { openai } from '@ai-sdk/openai';
+import { groq } from '@ai-sdk/groq';
 import { streamText, tool } from 'ai';
 import { z } from 'zod';
 import { getWeather } from '@/lib/weather';
@@ -25,14 +25,14 @@ export async function POST(req: Request) {
     const { messages } = body;
 
     console.log('[Chat API] Received messages:', messages);
-    console.log('[Chat API] Using OpenAI for streaming with tools...');
+    console.log('[Chat API] Using Groq for streaming with tools...');
 
     // Step 2: Use AI SDK's streamText()
     // This is where the magic happens!
     //
     // streamText() does ALL of this for us:
-    // - Calls OpenAI API with streaming enabled
-    // - Receives Server-Sent Events from OpenAI
+    // - Calls Groq API with streaming enabled
+    // - Receives Server-Sent Events from Groq
     // - Converts to a ReadableStream
     // - Handles errors and retries
     // - Formats response for Next.js
@@ -40,9 +40,9 @@ export async function POST(req: Request) {
     // With AI SDK v5, we get the result synchronously (no await needed!)
     const result = streamText({
       // Model configuration
-      // Note: Temporarily using gpt-4o for Session 4 to verify tool calling works
-      // gpt-5-nano may have issues with tool calling in current SDK version
-      model: openai('gpt-4o'),
+      // Using llama-3.3-70b-versatile - Groq's powerful model with tool calling support
+      // Other options: llama-3.1-70b-versatile, mixtral-8x7b-32768
+      model: groq('llama-3.3-70b-versatile'),
 
       // Messages array (OpenAI chat format)
       // Each message has: { role: 'user' | 'assistant' | 'system', content: string }
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
       // 🎓 SESSION 4: Add callbacks to monitor tool invocations
       onStepFinish: (step) => {
         console.log('[Chat API] Step finished');
-        console.log('[Chat API] Request body sent to OpenAI:', JSON.stringify(step.request?.body, null, 2));
+        console.log('[Chat API] Request body sent to Groq:', JSON.stringify(step.request?.body, null, 2));
         if (step.toolCalls && step.toolCalls.length > 0) {
           console.log('[Chat API] Tool calls:', JSON.stringify(step.toolCalls, null, 2));
         }
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
     //
     // const stream = new ReadableStream({
     //   async start(controller) {
-    //     for await (const chunk of openaiStream) {
+    //     for await (const chunk of groqStream) {
     //       controller.enqueue(encoder.encode(chunk));
     //     }
     //     controller.close();
