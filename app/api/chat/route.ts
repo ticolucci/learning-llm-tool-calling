@@ -11,7 +11,7 @@
  */
 
 import { groq } from '@ai-sdk/groq';
-import { streamText, tool } from 'ai';
+import { streamText, tool, convertToModelMessages } from 'ai';
 import { z } from 'zod';
 import { getWeather } from '@/lib/weather';
 
@@ -27,7 +27,13 @@ export async function POST(req: Request) {
     console.log('[Chat API] Received messages:', messages);
     console.log('[Chat API] Using Groq for streaming with tools...');
 
-    // Step 2: Use AI SDK's streamText()
+    // Step 2: Convert UIMessages to ModelMessages
+    // The useChat hook sends UIMessages (with parts, id, etc.)
+    // But streamText expects ModelMessages (with role, content)
+    const modelMessages = convertToModelMessages(messages);
+    console.log('[Chat API] Converted to model messages:', modelMessages);
+
+    // Step 3: Use AI SDK's streamText()
     // This is where the magic happens!
     //
     // streamText() does ALL of this for us:
@@ -46,7 +52,8 @@ export async function POST(req: Request) {
 
       // Messages array (OpenAI chat format)
       // Each message has: { role: 'user' | 'assistant' | 'system', content: string }
-      messages: messages,
+      // We convert from UIMessages to ModelMessages using convertToModelMessages
+      messages: modelMessages,
 
       // Optional: System prompt to guide the AI
       system: 'You are a helpful travel planning assistant. You can help users plan trips, get weather forecasts, and create packing checklists.',
@@ -111,7 +118,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // Step 3: Use toUIMessageStreamResponse() helper for tool calling support
+    // Step 4: Use toUIMessageStreamResponse() helper for tool calling support
     // 🎓 SESSION 4: Changed from toTextStreamResponse() to toUIMessageStreamResponse()
     //
     // toTextStreamResponse() - Only streams plain text (no tool calls)
