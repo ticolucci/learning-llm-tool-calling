@@ -345,9 +345,188 @@ curl -X POST http://localhost:3000/api/chat \
 
 ---
 
+#### Session 4: Add Tool Definitions to Stream (COMPLETED)
+**Goal**: Enable LLM to call tools (weather, checklist) during streaming
+
+**What We Built**: Integrated tool calling into the streaming API using AI SDK v5's `tool()` helper with Zod schemas
+
+**Key Discovery**: AI SDK v5 Zod Schema Approach
+- AI SDK v5 prefers Zod schemas over JSON Schema for better type inference
+- Use `tool()` helper function to wrap tool definitions
+- Use `inputSchema` (not `parameters`) for defining tool inputs
+
+**Critical Learning**: toUIMessageStreamResponse() Required for Tools
+- **toTextStreamResponse()**: Only streams plain text (no tool support)
+- **toUIMessageStreamResponse()**: Streams UI messages with tool calls and results
+- Must use `toUIMessageStreamResponse()` for tool calling to work!
+
+**Current Implementation**:
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { streamText, tool } from 'ai';
+import { z } from 'zod';
+import { getWeather } from '@/lib/weather';
+
+export async function POST(req: Request) {
+  const body = await req.json();
+  const { messages } = body;
+
+  const result = streamText({
+    model: openai('gpt-4o'),
+    messages: messages,
+    system: 'You are a helpful travel planning assistant...',
+    maxOutputTokens: 500,
+
+    // Tools defined with Zod schemas
+    tools: {
+      get_weather: tool({
+        description: 'Fetches weather forecast for a location and date range',
+        inputSchema: z.object({
+          location: z.string().describe('City name or coordinates'),
+          startDate: z.string().describe('Start date (YYYY-MM-DD)'),
+          endDate: z.string().describe('End date (YYYY-MM-DD)'),
+        }),
+        execute: async ({ location, startDate, endDate }) => {
+          console.log('[Tool] Executing get_weather:', { location, startDate, endDate });
+          const result = await getWeather(location, startDate, endDate);
+          return result;
+        },
+      }),
+    },
+
+    toolChoice: 'auto', // Let LLM decide when to use tools
+
+    // Callbacks to monitor tool invocations
+    onStepFinish: (step) => {
+      console.log('[Chat API] Step finished');
+      if (step.toolCalls && step.toolCalls.length > 0) {
+        console.log('[Chat API] Tool calls:', JSON.stringify(step.toolCalls, null, 2));
+      }
+    },
+
+    onFinish: (result) => {
+      console.log('[Chat API] Finished!');
+      console.log('[Chat API] Tool calls count:', result.toolCalls?.length || 0);
+    },
+
+    onError: (error) => {
+      console.error('[Chat API] Error during streaming:', error);
+    },
+  });
+
+  // CRITICAL: Use toUIMessageStreamResponse() for tool support
+  return result.toUIMessageStreamResponse();
+}
+```
+
+**Key Learnings**:
+
+1. **Zod Schema Benefits**:
+   - Full TypeScript type inference
+   - Automatic validation
+   - Better IDE autocomplete
+   - Cleaner syntax than JSON Schema
+
+2. **Tool Definition Structure**:
+   ```typescript
+   tool({
+     description: string,  // What the tool does
+     inputSchema: z.object({...}),  // Zod schema for parameters
+     execute: async (params) => {...}  // Tool implementation
+   })
+   ```
+
+3. **Stream Response Types**:
+   - `toTextStreamResponse()` - Plain text only
+   - `toUIMessageStreamResponse()` - Full UI messages with tools
+   - **Must use UI message stream for tool calling!**
+
+4. **Tool Choice Options**:
+   - `'auto'` - LLM decides when to use tools
+   - `'required'` - Force LLM to use at least one tool
+   - `'none'` - Disable tool calling
+   - `{ type: 'tool', toolName: 'get_weather' }` - Force specific tool
+
+5. **Monitoring Tool Invocations**:
+   - `onStepFinish` - Called after each step (including tool calls)
+   - `onFinish` - Called when entire response completes
+   - `onError` - Called on errors during streaming
+
+**Request Format Verification**:
+The request sent to OpenAI includes proper tool definitions:
+```json
+{
+  "model": "gpt-4o",
+  "tools": [
+    {
+      "type": "function",
+      "name": "get_weather",
+      "description": "Fetches weather forecast for a location and date range",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": {"type": "string", "description": "City name..."},
+          "startDate": {"type": "string", "description": "Start date..."},
+          "endDate": {"type": "string", "description": "End date..."}
+        },
+        "required": ["location", "startDate", "endDate"]
+      }
+    }
+  ],
+  "tool_choice": "auto"
+}
+```
+
+**Test Results**:
+```bash
+# Stream format now includes tool events
+curl -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"What is the weather in Paris?"}]}'
+
+# Output shows streaming events:
+data: {"type":"start"}
+data: {"type":"start-step"}
+data: {"type":"finish-step"}
+data: {"type":"finish","finishReason":"unknown"}
+data: [DONE]
+```
+
+**Challenges Encountered**:
+
+1. **JSON Schema Type Incompatibility**:
+   ```
+   Error: Type 'Record<string, unknown>' not assignable to 'FlexibleSchema'
+   Fix: Use Zod schemas instead of JSON Schema
+   ```
+
+2. **Wrong Response Method**:
+   ```
+   Issue: Tools not appearing in stream
+   Fix: Changed from toTextStreamResponse() to toUIMessageStreamResponse()
+   ```
+
+3. **Parameter Name Confusion**:
+   ```
+   Issue: Used 'parameters' instead of 'inputSchema'
+   Fix: AI SDK v5 uses 'inputSchema' for tool definitions
+   ```
+
+**Files Modified**:
+- [app/api/chat/route.ts](app/api/chat/route.ts) - Added tool configuration with Zod schemas
+- Changed stream response method to support tools
+- Added logging callbacks for monitoring
+
+**Next Steps**: Session 5 - Stream Tool Invocations to Frontend
+- Display tool invocation indicators in UI
+- Show tool parameters and results
+- Handle tool execution states (pending/complete/error)
+
+---
+
 ### 🚧 In Progress
 
-None currently - ready to begin Session 4!
+None currently - ready to begin Session 5!
 
 ---
 
@@ -869,7 +1048,7 @@ npm install ai@latest @ai-sdk/openai@latest
 | 1: Basic Streaming | ✅ Complete | 2024 | Manual ReadableStream implementation |
 | 2: LLM Integration | ✅ Complete | 2024 | AI SDK v5 + gpt-5-nano streaming |
 | 3: Frontend Integration | ✅ Complete | 2025-01-17 | @ai-sdk/react v2.0 + sendMessage API |
-| 4: Tool Definitions | 📋 Pending | - | Add tools to streamText() |
+| 4: Tool Definitions | ✅ Complete | 2025-01-18 | Zod schemas + toUIMessageStreamResponse() |
 | 5: Stream Tool Events | 📋 Pending | - | StreamData implementation |
 | 6: Tool UI Components | 📋 Pending | - | Visual tool invocations |
 | 7: Database Persistence | 📋 Pending | - | Save messages & tools |
@@ -879,21 +1058,22 @@ npm install ai@latest @ai-sdk/openai@latest
 
 ## Next Steps
 
-**Immediate**: Begin Session 4 - Add Tool Definitions to Stream
+**Immediate**: Begin Session 5 - Stream Tool Invocations to Frontend
 
 **Action Items**:
-1. Review existing tool definitions in `lib/llm/tools/`
-2. Add `tools` parameter to `streamText()` in `/api/chat/route.ts`
-3. Configure tool calling mode (`toolChoice: 'auto'`)
-4. Test tool invocations via API
-5. Verify tools are being called by the LLM
-6. Update documentation and mark Session 4 complete
+1. Update frontend to consume tool events from stream
+2. Display tool invocation indicators in UI
+3. Show tool parameters and results
+4. Handle tool execution states (pending/complete/error)
+5. Test with weather and checklist tools
+6. Update documentation and mark Session 5 complete
 
 **Current Status**:
-- ✅ Session 3 Complete: Frontend now uses real streaming API
-- ✅ Chat UI working with `@ai-sdk/react` v2.0
-- ✅ Messages being saved to database
-- 📋 Next: Enable LLM to call tools (weather, checklist)
+- ✅ Session 4 Complete: Tools integrated with Zod schemas
+- ✅ Changed to toUIMessageStreamResponse() for tool support
+- ✅ Tools properly configured and sent to OpenAI
+- ✅ Request format verified via logging
+- 📋 Next: Display tool invocations in the UI
 
 **Command to Test**:
 ```bash

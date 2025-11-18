@@ -1,17 +1,19 @@
 /**
  * Chat API Route - Streaming endpoint for LLM interactions
  *
- * Session 2: Real LLM Streaming with AI SDK
+ * Session 4: Add Tool Definitions to Stream
  *
  * Learning Points:
- * 1. How to use Vercel AI SDK's streamText()
- * 2. How AI SDK handles streaming under the hood
- * 3. The difference between manual streaming vs AI SDK streaming
- * 4. How to configure the OpenAI provider
+ * 1. How to define tools for LLM to call
+ * 2. How to add tools parameter to streamText()
+ * 3. How AI SDK handles tool invocations
+ * 4. How tools execute during streaming
  */
 
 import { openai } from '@ai-sdk/openai';
-import { streamText } from 'ai';
+import { streamText, tool } from 'ai';
+import { z } from 'zod';
+import { getWeather } from '@/lib/weather';
 
 // Allow up to 30 seconds for streaming responses
 export const maxDuration = 30;
@@ -23,7 +25,7 @@ export async function POST(req: Request) {
     const { messages } = body;
 
     console.log('[Chat API] Received messages:', messages);
-    console.log('[Chat API] Using OpenAI for streaming...');
+    console.log('[Chat API] Using OpenAI for streaming with tools...');
 
     // Step 2: Use AI SDK's streamText()
     // This is where the magic happens!
@@ -38,33 +40,87 @@ export async function POST(req: Request) {
     // With AI SDK v5, we get the result synchronously (no await needed!)
     const result = streamText({
       // Model configuration
-      model: openai('gpt-5-nano'),
+      // Note: Temporarily using gpt-4o for Session 4 to verify tool calling works
+      // gpt-5-nano may have issues with tool calling in current SDK version
+      model: openai('gpt-4o'),
 
       // Messages array (OpenAI chat format)
       // Each message has: { role: 'user' | 'assistant' | 'system', content: string }
       messages: messages,
 
       // Optional: System prompt to guide the AI
-      system: 'You are a helpful travel planning assistant.',
+      system: 'You are a helpful travel planning assistant. You can help users plan trips, get weather forecasts, and create packing checklists.',
 
       // Note: temperature is NOT supported for reasoning models like gpt-5-nano
       // temperature: 0.7, // Removed - not supported
 
       // Optional: Maximum OUTPUT tokens to generate (renamed from maxTokens in v5)
       maxOutputTokens: 500,
+
+      // 🎓 SESSION 4: Add tools for the LLM to call
+      // Tools are functions the AI can invoke during conversation
+      // In AI SDK v5, we use the tool() helper with Zod schemas for type safety
+      tools: {
+        // Weather tool - fetch forecasts for trip planning
+        get_weather: tool({
+          description: 'Fetches weather forecast for a location and date range',
+          inputSchema: z.object({
+            location: z.string().describe('City name or coordinates'),
+            startDate: z.string().describe('Start date (YYYY-MM-DD)'),
+            endDate: z.string().describe('End date (YYYY-MM-DD)'),
+          }),
+          execute: async ({ location, startDate, endDate }) => {
+            console.log('[Tool] Executing get_weather:', { location, startDate, endDate });
+            const result = await getWeather(location, startDate, endDate);
+            console.log('[Tool] get_weather result:', result);
+            return result;
+          },
+        }),
+      },
+
+      // 🎓 SESSION 4: Configure tool calling behavior
+      // 'auto' - Let the LLM decide when to use tools based on the conversation
+      // 'required' - Force the LLM to use at least one tool
+      // 'none' - Disable tool calling
+      // { type: 'tool', toolName: 'get_weather' } - Force a specific tool
+      //
+      // Forcing get_weather for testing
+      toolChoice: { type: 'tool', toolName: 'get_weather' },
+
+      // 🎓 SESSION 4: Add callbacks to monitor tool invocations
+      onStepFinish: (step) => {
+        console.log('[Chat API] Step finished');
+        console.log('[Chat API] Request body sent to OpenAI:', JSON.stringify(step.request?.body, null, 2));
+        if (step.toolCalls && step.toolCalls.length > 0) {
+          console.log('[Chat API] Tool calls:', JSON.stringify(step.toolCalls, null, 2));
+        }
+        if (step.toolResults && step.toolResults.length > 0) {
+          console.log('[Chat API] Tool results:', JSON.stringify(step.toolResults, null, 2));
+        }
+      },
+
+      onFinish: (result) => {
+        console.log('[Chat API] Finished!');
+        console.log('[Chat API] Text length:', result.text?.length || 0);
+        console.log('[Chat API] Tool calls count:', result.toolCalls?.length || 0);
+        if (result.toolCalls && result.toolCalls.length > 0) {
+          console.log('[Chat API] Tool calls:', JSON.stringify(result.toolCalls, null, 2));
+        }
+      },
+
+      onError: (error) => {
+        console.error('[Chat API] Error during streaming:', error);
+      },
     });
 
-    // Step 3: Use toTextStreamResponse() helper
-    // This is the CORRECT way in AI SDK v5!
+    // Step 3: Use toUIMessageStreamResponse() helper for tool calling support
+    // 🎓 SESSION 4: Changed from toTextStreamResponse() to toUIMessageStreamResponse()
     //
-    // 🎓 EDUCATIONAL: toTextStreamResponse() does what we did manually in Session 1:
-    // - Creates a ReadableStream
-    // - Encodes text chunks to UTF-8
-    // - Sets proper streaming headers ('Content-Type: text/plain', etc.)
-    // - Handles errors gracefully
+    // toTextStreamResponse() - Only streams plain text (no tool calls)
+    // toUIMessageStreamResponse() - Streams UI messages including tool calls and results
     //
-    // This replaces all the manual streaming code we wrote for learning!
-    return result.toTextStreamResponse();
+    // This is REQUIRED for tool calling to work properly!
+    return result.toUIMessageStreamResponse();
 
     // 🎓 LEARNING NOTE:
     // Behind the scenes, this is similar to Session 1:
