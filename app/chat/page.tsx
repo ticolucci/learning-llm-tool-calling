@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChat, type UIMessage } from '@ai-sdk/react';
 import { createConversation, saveMessage } from '@/lib/actions/messages';
+import { ToolInvocation } from './components/ToolInvocation';
 
 export default function ChatPage() {
   const conversationIdRef = useRef<string | null>(null);
@@ -25,6 +26,13 @@ export default function ChatPage() {
       .filter((part) => part.type === 'text')
       .map((part) => ('text' in part ? part.text : ''))
       .join('');
+  };
+
+  // Helper function to extract tool invocations from message parts
+  const getToolInvocations = (message: UIMessage) => {
+    return message.parts.filter(
+      (part) => part.type === 'dynamic-tool' || part.type.startsWith('tool-')
+    );
   };
 
   // Initialize conversation on mount
@@ -94,22 +102,50 @@ export default function ChatPage() {
             <p className="text-sm mt-2">Try: &quot;I&apos;m going to Paris next week&quot;</p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                  msg.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 dark:bg-gray-800'
-                }`}
-              >
-                <p className="whitespace-pre-wrap">{getMessageText(msg)}</p>
+          messages.map((msg) => {
+            const textContent = getMessageText(msg);
+            const toolInvocations = getToolInvocations(msg);
+
+            return (
+              <div key={msg.id}>
+                {/* Render tool invocations */}
+                {toolInvocations.map((toolPart, idx) => {
+                  // Type guard for dynamic-tool parts
+                  if (toolPart.type === 'dynamic-tool') {
+                    return (
+                      <ToolInvocation
+                        key={`${msg.id}-tool-${idx}`}
+                        toolName={toolPart.toolName}
+                        toolCallId={toolPart.toolCallId}
+                        state={toolPart.state}
+                        input={'input' in toolPart ? toolPart.input : undefined}
+                        output={'output' in toolPart ? toolPart.output : undefined}
+                        errorText={'errorText' in toolPart ? toolPart.errorText : undefined}
+                      />
+                    );
+                  }
+                  return null;
+                })}
+
+                {/* Render text content if present */}
+                {textContent && (
+                  <div
+                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                        msg.role === 'user'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 dark:bg-gray-800'
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap">{textContent}</p>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
         {isLoading && (
           <div className="flex justify-start">

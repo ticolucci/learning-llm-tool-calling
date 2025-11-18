@@ -83,9 +83,7 @@ export async function POST(req: Request) {
       // 'required' - Force the LLM to use at least one tool
       // 'none' - Disable tool calling
       // { type: 'tool', toolName: 'get_weather' } - Force a specific tool
-      //
-      // Forcing get_weather for testing
-      toolChoice: { type: 'tool', toolName: 'get_weather' },
+      toolChoice: 'auto',
 
       // 🎓 SESSION 4: Add callbacks to monitor tool invocations
       onStepFinish: (step) => {

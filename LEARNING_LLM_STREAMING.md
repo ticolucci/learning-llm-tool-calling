@@ -524,9 +524,188 @@ data: [DONE]
 
 ---
 
+#### Session 5: Stream Tool Invocations to Frontend (COMPLETED)
+**Goal**: Display tool invocations in the UI as they stream from the backend
+
+**What We Built**: Real-time visual display of tool calls with parameters and results
+
+**Key Discovery**: @ai-sdk/react v2.0 UIMessage Structure
+- `UIMessage` contains a `parts` array with different part types
+- Tool invocations appear as `dynamic-tool` parts in the message
+- Each tool part includes: `toolName`, `toolCallId`, `state`, `input`, `output`
+
+**Implementation**:
+
+**1. Created ToolInvocation Component** ([app/chat/components/ToolInvocation.tsx](app/chat/components/ToolInvocation.tsx)):
+```typescript
+interface ToolInvocationProps {
+  toolName: string;
+  toolCallId: string;
+  state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
+  input?: unknown;
+  output?: unknown;
+  errorText?: string;
+}
+
+export function ToolInvocation({ toolName, state, input, output, errorText }: ToolInvocationProps) {
+  const isLoading = state === 'input-streaming';
+  const hasError = state === 'output-error';
+  const isComplete = state === 'output-available';
+
+  // Tool-specific UI configuration
+  const getToolDisplay = () => {
+    if (toolName === 'get_weather') {
+      return {
+        icon: '🌤️',
+        title: 'Checking Weather',
+        loadingMessage: 'Fetching weather forecast...',
+      };
+    }
+    return {
+      icon: '🛠️',
+      title: `Calling ${toolName}`,
+      loadingMessage: 'Executing tool...',
+    };
+  };
+
+  // Render tool card with parameters, loading state, and results
+  // ...
+}
+```
+
+**2. Updated Chat Page** ([app/chat/page.tsx](app/chat/page.tsx)):
+```typescript
+// Helper to extract tool invocations from message parts
+const getToolInvocations = (message: UIMessage) => {
+  return message.parts.filter(
+    (part) => part.type === 'dynamic-tool' || part.type.startsWith('tool-')
+  );
+};
+
+// Render messages with tool invocations
+messages.map((msg) => {
+  const textContent = getMessageText(msg);
+  const toolInvocations = getToolInvocations(msg);
+
+  return (
+    <div key={msg.id}>
+      {/* Render each tool invocation */}
+      {toolInvocations.map((toolPart, idx) => {
+        if (toolPart.type === 'dynamic-tool') {
+          return (
+            <ToolInvocation
+              key={`${msg.id}-tool-${idx}`}
+              toolName={toolPart.toolName}
+              toolCallId={toolPart.toolCallId}
+              state={toolPart.state}
+              input={'input' in toolPart ? toolPart.input : undefined}
+              output={'output' in toolPart ? toolPart.output : undefined}
+              errorText={'errorText' in toolPart ? toolPart.errorText : undefined}
+            />
+          );
+        }
+        return null;
+      })}
+
+      {/* Render text content */}
+      {textContent && <div>...</div>}
+    </div>
+  );
+});
+```
+
+**Key Learnings**:
+
+1. **UIMessage Parts Array**:
+   - Messages have a `parts` array with different content types
+   - Text parts: `{ type: 'text', text: string }`
+   - Tool parts: `{ type: 'dynamic-tool', toolName, toolCallId, state, input?, output? }`
+   - Other parts: file, reasoning, data, source, etc.
+
+2. **Tool Invocation States**:
+   - `input-streaming` - Tool parameters are being received
+   - `input-available` - Complete tool input received
+   - `output-available` - Tool executed successfully with results
+   - `output-error` - Tool execution failed
+
+3. **Streaming Events** (from backend):
+   ```
+   data: {"type":"tool-input-start","toolCallId":"...","toolName":"get_weather"}
+   data: {"type":"tool-input-delta","toolCallId":"...","inputTextDelta":"..."}
+   data: {"type":"tool-input-available","toolCallId":"...","input":{...}}
+   data: {"type":"tool-output-available","toolCallId":"...","output":{...}}
+   ```
+
+4. **Visual Design**:
+   - Purple-themed cards distinguish tool calls from regular messages
+   - Loading spinner during execution
+   - Parameter display in code-style formatting
+   - Weather-specific output formatting with forecast details
+   - Error states with red highlighting
+
+**Test Results**:
+```bash
+# Backend streaming test
+curl -X POST http://localhost:3002/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"What is the weather in Paris from 2025-01-20 to 2025-01-22?"}]}'
+
+# Stream output:
+data: {"type":"tool-input-start","toolCallId":"r9d8bywc6","toolName":"get_weather"}
+data: {"type":"tool-input-available","toolCallId":"r9d8bywc6","input":{"location":"Paris",...}}
+data: {"type":"tool-output-available","toolCallId":"r9d8bywc6","output":{"forecast":[...]}}
+data: {"type":"finish","finishReason":"tool-calls"}
+```
+
+**Architecture Benefits**:
+- Real-time visual feedback for tool execution
+- Type-safe tool invocation rendering
+- Extensible design for adding new tools
+- Clear separation between text and tool content
+- Automatic state management via useChat hook
+
+**Challenges Encountered**:
+
+1. **Type Mismatches with Tool States**:
+   ```typescript
+   // Initial attempt (wrong)
+   state: 'input-streaming' | 'input-complete' | 'output-streaming' | 'output-complete'
+
+   // Correct (matches AI SDK types)
+   state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error'
+   ```
+
+2. **Unknown Types from Parts**:
+   ```typescript
+   // Had to add type guards
+   input?: unknown;  // Not Record<string, unknown>
+
+   // Then check at runtime
+   if (input && typeof input === 'object' && Object.keys(input).length > 0) {
+     // Cast to Record<string, unknown> for rendering
+   }
+   ```
+
+3. **Dynamic Tool Type Detection**:
+   ```typescript
+   // Filter for both specific and dynamic tool types
+   return message.parts.filter(
+     (part) => part.type === 'dynamic-tool' || part.type.startsWith('tool-')
+   );
+   ```
+
+**Files Created/Modified**:
+- [app/chat/components/ToolInvocation.tsx](app/chat/components/ToolInvocation.tsx) - New component for tool display
+- [app/chat/page.tsx](app/chat/page.tsx) - Updated to render tool invocations
+- [app/api/chat/route.ts](app/api/chat/route.ts) - Changed toolChoice to 'auto' for natural behavior
+
+**Next Steps**: Session 6 was merged with Session 5 - Tool UI is complete!
+
+---
+
 ### 🚧 In Progress
 
-None currently - ready to begin Session 5!
+None currently - ready to begin Session 7!
 
 ---
 
@@ -1046,11 +1225,11 @@ npm install ai@latest @ai-sdk/openai@latest
 | Session | Status | Completion Date | Key Achievement |
 |---------|--------|-----------------|-----------------|
 | 1: Basic Streaming | ✅ Complete | 2024 | Manual ReadableStream implementation |
-| 2: LLM Integration | ✅ Complete | 2024 | AI SDK v5 + gpt-5-nano streaming |
+| 2: LLM Integration | ✅ Complete | 2024 | AI SDK v5 + Groq streaming |
 | 3: Frontend Integration | ✅ Complete | 2025-01-17 | @ai-sdk/react v2.0 + sendMessage API |
 | 4: Tool Definitions | ✅ Complete | 2025-01-18 | Zod schemas + toUIMessageStreamResponse() |
-| 5: Stream Tool Events | 📋 Pending | - | StreamData implementation |
-| 6: Tool UI Components | 📋 Pending | - | Visual tool invocations |
+| 5: Tool UI Display | ✅ Complete | 2025-11-18 | ToolInvocation component + UIMessage parts |
+| 6: (Merged with 5) | ✅ Complete | 2025-11-18 | Visual tool invocations complete |
 | 7: Database Persistence | 📋 Pending | - | Save messages & tools |
 | 8: Advanced Features | 📋 Pending | - | Cancel, regenerate, edit |
 
@@ -1058,28 +1237,29 @@ npm install ai@latest @ai-sdk/openai@latest
 
 ## Next Steps
 
-**Immediate**: Begin Session 5 - Stream Tool Invocations to Frontend
+**Immediate**: Begin Session 7 - Persist Streamed Messages to Database
 
 **Action Items**:
-1. Update frontend to consume tool events from stream
-2. Display tool invocation indicators in UI
-3. Show tool parameters and results
-4. Handle tool execution states (pending/complete/error)
-5. Test with weather and checklist tools
-6. Update documentation and mark Session 5 complete
+1. Review existing database schema for messages and tool invocations
+2. Implement message persistence in the chat API route
+3. Save tool invocations with parameters and results
+4. Link everything via foreign keys to conversations
+5. Test database saves during streaming
+6. Update documentation and mark Session 7 complete
 
 **Current Status**:
-- ✅ Session 4 Complete: Tools integrated with Zod schemas
-- ✅ Changed to toUIMessageStreamResponse() for tool support
-- ✅ Tools properly configured and sent to OpenAI
-- ✅ Request format verified via logging
-- 📋 Next: Display tool invocations in the UI
+- ✅ Session 5 Complete: Tool invocations displayed in UI
+- ✅ ToolInvocation component renders real-time tool calls
+- ✅ Weather tool successfully tested end-to-end
+- ✅ Purple-themed cards distinguish tool calls from messages
+- 📋 Next: Persist all streaming data to database
 
 **Command to Test**:
 ```bash
 npm run dev
-# Open http://localhost:3000/chat
-# Try: "I'm going to Paris next week, what should I pack?"
+# Open http://localhost:3002/chat
+# Try: "What is the weather in Paris from 2025-01-20 to 2025-01-22?"
+# You should see a purple card with weather forecast details!
 ```
 
 ---
@@ -1109,11 +1289,16 @@ Following TDD (Test-Driven Development) as specified in CLAUDE.md:
 
 ## Conclusion
 
-We've successfully built a foundation for LLM streaming in Next.js. The backend API is production-ready with AI SDK v5 and gpt-5-nano. The next phase focuses on frontend integration and tool calling, followed by database persistence and advanced UX features.
+We've successfully built a complete LLM streaming system with visual tool invocations! The application now:
+- ✅ Streams responses from Groq's Llama 3.3 70B model
+- ✅ Integrates tools with Zod schemas
+- ✅ Displays tool invocations in real-time with purple-themed cards
+- ✅ Shows weather forecasts with formatted results
+- ✅ Handles tool execution states (streaming, available, error)
 
-The learning program is designed to be incremental - each session builds on the previous one, with working code at every step. By the end of Session 8, we'll have a fully-featured, production-ready AI chat application with streaming, tool calling, and persistence.
+The learning program is designed to be incremental - each session builds on the previous one, with working code at every step. Sessions 5 and 6 are now complete! Next up: database persistence (Session 7) and advanced features (Session 8).
 
 ---
 
-**Last Updated**: 2025-01-17 (Session 3 completion)
-**Next Session**: Session 4 - Add Tool Definitions to Stream
+**Last Updated**: 2025-11-18 (Session 5 completion - Tool UI Display)
+**Next Session**: Session 7 - Persist Streamed Messages to Database
