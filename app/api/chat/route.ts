@@ -11,9 +11,10 @@
  */
 
 import { groq } from '@ai-sdk/groq';
-import { streamText, tool, convertToModelMessages } from 'ai';
+import { streamText, tool, convertToModelMessages, stepCountIs } from 'ai';
 import { z } from 'zod';
 import { getWeather } from '@/lib/weather';
+import { parseHumanDate as parseDate } from '@/lib/date-parser';
 
 // Allow up to 30 seconds for streaming responses
 export const maxDuration = 30;
@@ -56,13 +57,16 @@ export async function POST(req: Request) {
       messages: modelMessages,
 
       // Optional: System prompt to guide the AI
-      system: 'You are a helpful travel planning assistant. You can help users plan trips, get weather forecasts, and create packing checklists.',
+      system: `You are a helpful travel planning assistant. Your main goal is to help the user have a packing list to ensure they don't forget anything important. 
+      Use tools when needed to provide accurate information (e.g. calculate relative dates from user input before getting weather forecast for those days).
+      account for how many days the trip will be, to plan how many outfits to suggest. Interact with the user to get any missing information and preferences of type of activites.`,
 
       // Note: temperature is NOT supported for reasoning models like gpt-5-nano
       // temperature: 0.7, // Removed - not supported
 
       // Optional: Maximum OUTPUT tokens to generate (renamed from maxTokens in v5)
       maxOutputTokens: 500,
+      stopWhen: stepCountIs(10),
 
       // 🎓 SESSION 4: Add tools for the LLM to call
       // Tools are functions the AI can invoke during conversation
@@ -80,6 +84,18 @@ export async function POST(req: Request) {
             console.log('[Tool] Executing get_weather:', { location, startDate, endDate });
             const result = await getWeather(location, startDate, endDate);
             console.log('[Tool] get_weather result:', result);
+            return result;
+          },
+        }),
+        date_parser: tool({
+          description: 'Parses a date string into a standardized format',
+          inputSchema: z.object({
+            dateString: z.string().describe('Date string to parse'),
+          }),
+          execute: async ({ dateString }) => {
+            console.log('[Tool] Executing date_parser:', { dateString });
+            const result = await parseDate(dateString);
+            console.log('[Tool] date_parser result:', result);
             return result;
           },
         }),

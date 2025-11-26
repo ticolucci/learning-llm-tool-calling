@@ -112,7 +112,7 @@ export default function ChatPage() {
                 {toolInvocations.map((toolPart, idx) => {
                   // Type guard for dynamic-tool parts
                   if (toolPart.type === 'dynamic-tool') {
-                    return (
+                    return ( 
                       <ToolInvocation
                         key={`${msg.id}-tool-${idx}`}
                         toolName={toolPart.toolName}
